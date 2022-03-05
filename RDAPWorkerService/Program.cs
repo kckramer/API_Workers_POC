@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace RDAPWorkerService
 {
@@ -23,9 +24,25 @@ namespace RDAPWorkerService
                     logging.AddConsole();
                 })
                 .UseWindowsService()
-                .ConfigureServices((hostContext, services) =>
+                .ConfigureAppConfiguration((hostingContext, configBuilder) =>
+                {
+                    configBuilder.Sources.Clear();
+
+                    IHostEnvironment env = hostingContext.HostingEnvironment;
+
+                    configBuilder
+                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                        .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
+
+                })
+                .ConfigureServices((hostingContext, services) =>
                 {
                     services.AddHostedService<Worker>();
+
+                    IConfiguration configuration = hostingContext.Configuration;
+                    WorkerOptions options = configuration.GetSection("GoogleCloudAPIKey").Get<WorkerOptions>();
+
+                    services.AddSingleton(options);
                 });
     }
 }

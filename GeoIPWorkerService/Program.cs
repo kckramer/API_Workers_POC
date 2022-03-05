@@ -36,10 +36,7 @@ namespace GeoIPWorkerService
 
                 configBuilder
                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                    .AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
-
-
-
+                    .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
 
             })
             .ConfigureServices((hostingContext, services) =>
