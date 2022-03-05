@@ -29,5 +29,16 @@ namespace WebAPI.Controllers
         {
             return WorkerServices;
         }
+
+        [HttpPost]
+        public async Task<ActionResult<WorkerService>> Post(Input input)
+        {
+            if (string.IsNullOrEmpty(input.IPAddress) && string.IsNullOrEmpty(input.DomainAddress))
+            {
+                return BadRequest();
+            }
+
+            return Ok(input);
+        }
     }
 }
