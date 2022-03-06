@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Google.Apis.DomainsRDAP.v1;
 using Google.Apis.Services;
+using Azure.Messaging.ServiceBus;
 
 namespace RDAPWorkerService
 {
@@ -15,12 +16,14 @@ namespace RDAPWorkerService
         private readonly ILogger<Worker> _logger;
         private readonly WorkerOptions _options;
         private DomainsRDAPService _domainsRDAPService;
+        private ServiceBusClient _serviceBusClient;
 
-        public Worker(ILogger<Worker> logger, DomainsRDAPService domainsRDAPService, WorkerOptions options)
+        public Worker(ILogger<Worker> logger, DomainsRDAPService domainsRDAPService, WorkerOptions options, ServiceBusClient serviceBusClient)
         {
             _logger = logger;
             _domainsRDAPService = domainsRDAPService;
             _options = options;
+            _serviceBusClient = serviceBusClient;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -29,17 +32,42 @@ namespace RDAPWorkerService
             {
                 _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
-                using (var domainsService = new DomainsRDAPService(new BaseClientService.Initializer
-                {
-                    ApplicationName = "domainsrdap",
-                    ApiKey = _options.GoogleCloudAPIKey,
-                }))
-                {
-                    var result = domainsService.Domain.Get("google.com");
-                }
+                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+
+                // create a processor that we can use to process the messages
+                var processor = _serviceBusClient.CreateProcessor(_options.QueueName, new ServiceBusProcessorOptions());
+
+                // add handler to process messages
+                processor.ProcessMessageAsync += MessageHandler;
+
+                // add handler to process any errors
+                processor.ProcessErrorAsync += ErrorHandler;
+
+                // start processing 
+                await processor.StartProcessingAsync();
 
                 await Task.Delay(1000, stoppingToken);
             }
+        }
+
+        private Task ErrorHandler(ProcessErrorEventArgs args)
+        {
+            _logger.LogError(args.Exception.ToString());
+            return Task.CompletedTask;
+        }
+
+        private async Task MessageHandler(ProcessMessageEventArgs args)
+        {
+            string body = args.Message.Body.ToString();
+            _logger.LogInformation($"Received: {body}");
+
+            // _domainsRDAPService.HttpClientInitializer.Initialize();
+
+            var result = await _domainsRDAPService.Domain.Get(body).ExecuteAsync();
+
+            _logger.LogInformation(result.Data);
+
+            await args.CompleteMessageAsync(args.Message);
         }
     }
 }

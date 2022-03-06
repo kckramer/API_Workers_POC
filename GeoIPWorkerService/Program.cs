@@ -1,3 +1,4 @@
+using Azure.Messaging.ServiceBus;
 using MaxMind.GeoIP2;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,7 +26,6 @@ namespace GeoIPWorkerService
             {
                 logging.AddConsole();
                 logging.AddDebug();
-                logging.AddEventLog();
             })
             .UseWindowsService()
             .ConfigureAppConfiguration((hostingContext, configBuilder) =>
@@ -35,8 +35,7 @@ namespace GeoIPWorkerService
                 IHostEnvironment env = hostingContext.HostingEnvironment;
 
                 configBuilder
-                    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                    .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
+                    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
             })
             .ConfigureServices((hostingContext, services) =>
@@ -45,6 +44,19 @@ namespace GeoIPWorkerService
 
                 IConfiguration configuration = hostingContext.Configuration;
                 WorkerOptions options = configuration.GetSection("MaxMind").Get<WorkerOptions>();
+                var webServiceClient = new WebServiceClient(options.AccountId, options.LicenseKey, host: "geolite.info");
+                services.AddSingleton(webServiceClient);
+
+                var connString = configuration.GetValue<string>("AzureServiceBus");
+
+                if (connString != null)
+                {
+                    var serviceBusClient = new ServiceBusClient(connString);
+                    services.AddSingleton(serviceBusClient);
+
+                    var geoIPQueue = configuration.GetValue<string>("WorkerQueue");
+                    options.QueueName = geoIPQueue;
+                }
 
                 services.AddSingleton(options);
             });

@@ -5,5 +5,7 @@
         public int AccountId { get; set; }
 
         public string LicenseKey { get; set; }
+
+        public string QueueName { get; set; }
     }
 }

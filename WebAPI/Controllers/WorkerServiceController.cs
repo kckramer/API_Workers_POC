@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Azure.Messaging.ServiceBus;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -18,10 +19,14 @@ namespace WebAPI.Controllers
         };
 
         private readonly ILogger<WorkerServiceController> _logger;
+        private ServiceBusClient _client;
+        private ServiceBusSenders _senders;
 
-        public WorkerServiceController(ILogger<WorkerServiceController> logger)
+        public WorkerServiceController(ILogger<WorkerServiceController> logger, ServiceBusClient serviceBusClient, ServiceBusSenders serviceBusSenders)
         {
             _logger = logger;
+            _client = serviceBusClient;
+            _senders = serviceBusSenders;
         }
 
         [HttpGet]
@@ -37,6 +42,30 @@ namespace WebAPI.Controllers
             {
                 return BadRequest();
             }
+
+            if (!input.Services.Any())
+            {
+                input.Services = WorkerServices;
+            }
+
+            var tasks = new List<Task>();
+
+            foreach(var service in input.Services)
+            {
+                if (service.Name == "GeoIP Worker Service" && !string.IsNullOrEmpty(input.IPAddress))
+                {
+                    var task = _senders.GeoIPSender.SendMessageAsync(new ServiceBusMessage(input.IPAddress));
+
+                    tasks.Add(task);
+                }
+                else if (service.Name == "RDAP Worker Service" && !string.IsNullOrEmpty(input.DomainAddress))
+                {
+                    var task = _senders.RDAPSender.SendMessageAsync(new ServiceBusMessage(input.DomainAddress));
+                    tasks.Add(task);
+                }
+            }
+
+            await Task.WhenAll(tasks);    
 
             return Ok(input);
         }

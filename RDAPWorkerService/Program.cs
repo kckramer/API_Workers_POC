@@ -6,6 +6,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Google.Apis.Services;
+using Google.Apis.DomainsRDAP.v1;
+using Azure.Messaging.ServiceBus;
 
 namespace RDAPWorkerService
 {
@@ -31,8 +34,7 @@ namespace RDAPWorkerService
                     IHostEnvironment env = hostingContext.HostingEnvironment;
 
                     configBuilder
-                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                        .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
+                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
                 })
                 .ConfigureServices((hostingContext, services) =>
@@ -40,9 +42,32 @@ namespace RDAPWorkerService
                     services.AddHostedService<Worker>();
 
                     IConfiguration configuration = hostingContext.Configuration;
-                    WorkerOptions options = configuration.GetSection("GoogleCloudAPIKey").Get<WorkerOptions>();
+                    var apiKey = configuration.GetValue<string>("GoogleCloudAPIKey");
 
-                    services.AddSingleton(options);
+                    var workerOptions = new WorkerOptions();
+
+                    workerOptions.GoogleCloudAPIKey = apiKey;
+
+                    var domainsRDAPService = new DomainsRDAPService(new BaseClientService.Initializer
+                    {
+                        ApplicationName = "domainsrdap",
+                        ApiKey = workerOptions.GoogleCloudAPIKey,
+                    });
+
+                    services.AddSingleton(domainsRDAPService);
+
+                    var connString = configuration.GetValue<string>("AzureServiceBus");
+
+                    if (connString != null)
+                    {
+                        var serviceBusClient = new ServiceBusClient(connString);
+                        services.AddSingleton(serviceBusClient);
+
+                        var rdapQueue = configuration.GetValue<string>("WorkerQueue");
+                        workerOptions.QueueName = rdapQueue;
+                    }
+
+                    services.AddSingleton(workerOptions);
                 });
     }
 }
