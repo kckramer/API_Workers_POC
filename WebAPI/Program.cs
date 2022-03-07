@@ -28,11 +28,8 @@ namespace WebAPI
                 {
                     configBuilder.Sources.Clear();
 
-                    IHostEnvironment env = hostingContext.HostingEnvironment;
-
                     configBuilder
-                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                        .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
+                        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
                 })
                 .ConfigureServices((hostingContext, services) =>
@@ -54,7 +51,25 @@ namespace WebAPI
                         var senders = new ServiceBusSenders(geoIPQueueSender, rdapQueueSender);
 
                         services.AddSingleton(senders);
+
+                        var responseQueue1 = configuration.GetValue<string>("WorkerResponseQueue1");
+                        var responseQueue2 = configuration.GetValue<string>("WorkerResponseQueue2");
+
+                        var collectorQueues = new CollectorQueues(responseQueue1, responseQueue2);
+                        services.AddSingleton(collectorQueues);
                     }
                 });
+    }
+
+    public class CollectorQueues
+    {
+        private string responseQueue1;
+        private string responseQueue2;
+
+        public CollectorQueues(string responseQueue1, string responseQueue2)
+        {
+            this.responseQueue1 = responseQueue1;
+            this.responseQueue2 = responseQueue2;
+        }
     }
 }

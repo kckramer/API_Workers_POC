@@ -61,11 +61,9 @@ namespace RDAPWorkerService
             string body = args.Message.Body.ToString();
             _logger.LogInformation($"Received: {body}");
 
-            // _domainsRDAPService.HttpClientInitializer.Initialize();
+            await _domainsRDAPService.Domain.Get(body).ExecuteAsync();
 
-            var result = await _domainsRDAPService.Domain.Get(body).ExecuteAsync();
-
-            _logger.LogInformation(result.Data);
+            _logger.LogInformation(string.Empty);
 
             await args.CompleteMessageAsync(args.Message);
         }

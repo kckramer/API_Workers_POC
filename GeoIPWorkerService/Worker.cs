@@ -76,6 +76,8 @@ namespace GeoIPWorkerService
 
             _logger.LogInformation(response.Location.Latitude.ToString());  // 44.9733
             _logger.LogInformation(response.Location.Longitude.ToString()); // -93.2323
+
+            // send to complete queue
             
 
             // complete the message. messages is deleted from the queue. 

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using WebAPI.Models;
 
 namespace WebAPI.Controllers
 {
@@ -21,12 +22,17 @@ namespace WebAPI.Controllers
         private readonly ILogger<WorkerServiceController> _logger;
         private ServiceBusClient _client;
         private ServiceBusSenders _senders;
+        private CollectorQueues _collectorQueues;
 
-        public WorkerServiceController(ILogger<WorkerServiceController> logger, ServiceBusClient serviceBusClient, ServiceBusSenders serviceBusSenders)
+        public WorkerServiceController(ILogger<WorkerServiceController> logger,
+            ServiceBusClient serviceBusClient,
+            ServiceBusSenders serviceBusSenders,
+            CollectorQueues collectorQueues)
         {
             _logger = logger;
             _client = serviceBusClient;
             _senders = serviceBusSenders;
+            _collectorQueues = collectorQueues;
         }
 
         [HttpGet]
@@ -49,25 +55,51 @@ namespace WebAPI.Controllers
             }
 
             var tasks = new List<Task>();
+            var workerServicesMessagesSent = new List<string>();
+            var correlationId = Guid.NewGuid();
 
             foreach(var service in input.Services)
             {
                 if (service.Name == "GeoIP Worker Service" && !string.IsNullOrEmpty(input.IPAddress))
                 {
-                    var task = _senders.GeoIPSender.SendMessageAsync(new ServiceBusMessage(input.IPAddress));
+                    var messageBody = new InputMessage(correlationId, input.IPAddress);
+                    var task = _senders.GeoIPSender.SendMessageAsync(new ServiceBusMessage(messageBody.ToString()));
 
                     tasks.Add(task);
+                    workerServicesMessagesSent.Add(service.Name);
                 }
                 else if (service.Name == "RDAP Worker Service" && !string.IsNullOrEmpty(input.DomainAddress))
                 {
-                    var task = _senders.RDAPSender.SendMessageAsync(new ServiceBusMessage(input.DomainAddress));
+                    var messageBody = new InputMessage(correlationId, input.DomainAddress);
+                    var task = _senders.RDAPSender.SendMessageAsync(new ServiceBusMessage(messageBody.ToString()));
+
                     tasks.Add(task);
+                    workerServicesMessagesSent.Add(service.Name);
                 }
             }
 
-            await Task.WhenAll(tasks);    
+            await Task.WhenAll(tasks);
 
-            return Ok(input);
+            var result = await CollectResponsesAsync(workerServicesMessagesSent);
+
+            return Ok(result);
+        }
+
+        private async Task<Output> CollectResponsesAsync(List<string> workerServicesMessagesSent)
+        {
+            var result = false;
+
+            while (!result)
+            {
+                await Task.Delay(1000);
+
+                foreach (var message in workerServicesMessagesSent)
+                {
+                    
+                }
+            }
+
+            return new Output();
         }
     }
 }

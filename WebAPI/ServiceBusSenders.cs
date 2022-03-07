@@ -13,5 +13,6 @@ namespace WebAPI
         public ServiceBusSender GeoIPSender { get; set; }
 
         public ServiceBusSender RDAPSender { get; set; }
+
     }
 }
