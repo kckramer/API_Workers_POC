@@ -56,6 +56,12 @@ namespace GeoIPWorkerService
 
                     var geoIPQueue = configuration.GetValue<string>("WorkerQueue");
                     options.QueueName = geoIPQueue;
+
+                    var geoIPResultsQueue = configuration.GetValue<string>("WorkerResponseQueue");
+                    options.WorkerResponseQueueName = geoIPResultsQueue;
+
+                    var sender = serviceBusClient.CreateSender(geoIPResultsQueue);
+                    services.AddSingleton(sender);
                 }
 
                 services.AddSingleton(options);

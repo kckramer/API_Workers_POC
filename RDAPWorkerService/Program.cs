@@ -65,6 +65,12 @@ namespace RDAPWorkerService
 
                         var rdapQueue = configuration.GetValue<string>("WorkerQueue");
                         workerOptions.QueueName = rdapQueue;
+
+                        var rdapResponseQueue = configuration.GetValue<string>("WorkerResponseQueue");
+                        workerOptions.ResponseQueueName = rdapResponseQueue;
+
+                        var sender = serviceBusClient.CreateSender(rdapResponseQueue);
+                        services.AddSingleton(sender);
                     }
 
                     services.AddSingleton(workerOptions);

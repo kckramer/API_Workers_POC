@@ -5,5 +5,7 @@
         public string GoogleCloudAPIKey { get; set; }
 
         public string QueueName { get; set; }
+
+        public string ResponseQueueName { get; set; }
     }
 }

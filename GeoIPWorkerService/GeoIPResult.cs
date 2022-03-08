@@ -1,5 +1,6 @@
 ﻿using MaxMind.GeoIP2.Model;
 using MaxMind.GeoIP2.Responses;
+using System;
 
 namespace GeoIPWorkerService
 {
@@ -23,6 +24,8 @@ namespace GeoIPWorkerService
         private Postal Postal { get; set; }
 
         private Location Location { get; set; }
+
+        public Guid CorrelationId { get; set; }
 
         public string? IsoCode 
         { 

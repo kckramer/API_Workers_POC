@@ -3,8 +3,12 @@ using MaxMind.GeoIP2;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
+using System.IO;
+using System.Runtime.Serialization;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 
 namespace GeoIPWorkerService
 {
@@ -14,13 +18,15 @@ namespace GeoIPWorkerService
         private WebServiceClient _webServiceClient;
         private readonly WorkerOptions _options;
         private ServiceBusClient _serviceBusClient;
+        private ServiceBusSender _serviceBusSender;
 
-        public Worker(ILogger<Worker> logger, WebServiceClient webServiceClient, WorkerOptions options, ServiceBusClient serviceBusClient)
+        public Worker(ILogger<Worker> logger, WebServiceClient webServiceClient, WorkerOptions options, ServiceBusClient serviceBusClient, ServiceBusSender serviceBusSender)
         {
             _logger = logger;
             _webServiceClient = webServiceClient;
             _options = options;
             _serviceBusClient = serviceBusClient;
+            _serviceBusSender = serviceBusSender;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -48,6 +54,7 @@ namespace GeoIPWorkerService
         private Task ErrorHandler(ProcessErrorEventArgs args)
         {
             _logger.LogError(args.Exception.ToString());
+
             return Task.CompletedTask;
         }
 
@@ -57,28 +64,17 @@ namespace GeoIPWorkerService
             string body = args.Message.Body.ToString();
             _logger.LogInformation($"Received: {body}");
 
-            var response = await _webServiceClient.CityAsync(body);
+            var inputMessage = JsonSerializer.Deserialize<InputMessage>(args.Message.Body); 
+
+            var response = await _webServiceClient.CityAsync(inputMessage.Data);
 
             if (response != null)
             {
                 var geoIPResult = new GeoIPResult(response);
-            }
+                geoIPResult.CorrelationId = inputMessage.CorrelationId;
 
-            _logger.LogInformation(response.Country.IsoCode);        // 'US'
-            _logger.LogInformation(response.Country.Name);           // 'United States'
-
-            _logger.LogInformation(response.MostSpecificSubdivision.Name);    // 'Minnesota'
-            _logger.LogInformation(response.MostSpecificSubdivision.IsoCode); // 'MN'
-
-            _logger.LogInformation(response.City.Name); // 'Minneapolis'
-
-            _logger.LogInformation(response.Postal.Code); // '55455'
-
-            _logger.LogInformation(response.Location.Latitude.ToString());  // 44.9733
-            _logger.LogInformation(response.Location.Longitude.ToString()); // -93.2323
-
-            // send to complete queue
-            
+                await _serviceBusSender.SendMessageAsync(new ServiceBusMessage(JsonSerializer.Serialize(geoIPResult)));
+            }   
 
             // complete the message. messages is deleted from the queue. 
             await args.CompleteMessageAsync(args.Message);

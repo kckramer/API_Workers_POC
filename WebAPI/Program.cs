@@ -63,8 +63,8 @@ namespace WebAPI
 
     public class CollectorQueues
     {
-        private string responseQueue1;
-        private string responseQueue2;
+        public string responseQueue1 { get; set; }
+        public string responseQueue2 { get; set; }
 
         public CollectorQueues(string responseQueue1, string responseQueue2)
         {

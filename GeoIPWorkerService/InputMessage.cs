@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace WebAPI.Models
+namespace GeoIPWorkerService
 {
     public class InputMessage
     {

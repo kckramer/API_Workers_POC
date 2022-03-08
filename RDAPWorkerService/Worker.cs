@@ -8,6 +8,11 @@ using System.Threading.Tasks;
 using Google.Apis.DomainsRDAP.v1;
 using Google.Apis.Services;
 using Azure.Messaging.ServiceBus;
+using System.Runtime.Serialization;
+using System.Xml;
+using RDAPWorkerService.Models;
+using System.Text.Json;
+using System.IO;
 
 namespace RDAPWorkerService
 {
@@ -17,21 +22,21 @@ namespace RDAPWorkerService
         private readonly WorkerOptions _options;
         private DomainsRDAPService _domainsRDAPService;
         private ServiceBusClient _serviceBusClient;
+        private ServiceBusSender _serviceBusSender;
 
-        public Worker(ILogger<Worker> logger, DomainsRDAPService domainsRDAPService, WorkerOptions options, ServiceBusClient serviceBusClient)
+        public Worker(ILogger<Worker> logger, DomainsRDAPService domainsRDAPService, WorkerOptions options, ServiceBusClient serviceBusClient, ServiceBusSender serviceBusSender)
         {
             _logger = logger;
             _domainsRDAPService = domainsRDAPService;
             _options = options;
             _serviceBusClient = serviceBusClient;
+            _serviceBusSender = serviceBusSender;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-
                 _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
                 // create a processor that we can use to process the messages
@@ -53,17 +58,20 @@ namespace RDAPWorkerService
         private Task ErrorHandler(ProcessErrorEventArgs args)
         {
             _logger.LogError(args.Exception.ToString());
+
             return Task.CompletedTask;
         }
 
         private async Task MessageHandler(ProcessMessageEventArgs args)
         {
-            string body = args.Message.Body.ToString();
+            var body = args.Message.Body;
             _logger.LogInformation($"Received: {body}");
 
-            await _domainsRDAPService.Domain.Get(body).ExecuteAsync();
+            var output = JsonSerializer.Deserialize<Output>(body);
 
-            _logger.LogInformation(string.Empty);
+            output.Data = "Service unavailable";
+
+            await _serviceBusSender.SendMessageAsync(new ServiceBusMessage(JsonSerializer.Serialize(output)));
 
             await args.CompleteMessageAsync(args.Message);
         }

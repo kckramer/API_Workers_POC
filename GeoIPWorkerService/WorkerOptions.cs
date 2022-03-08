@@ -7,5 +7,7 @@
         public string LicenseKey { get; set; }
 
         public string QueueName { get; set; }
+
+        public string WorkerResponseQueueName { get; set; }
     }
 }

@@ -3,8 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
+using System.Text.Json;
 using System.Threading.Tasks;
+using System.Xml;
 using WebAPI.Models;
 
 namespace WebAPI.Controllers
@@ -58,48 +62,139 @@ namespace WebAPI.Controllers
             var workerServicesMessagesSent = new List<string>();
             var correlationId = Guid.NewGuid();
 
-            foreach(var service in input.Services)
+            foreach (var service in input.Services)
             {
                 if (service.Name == "GeoIP Worker Service" && !string.IsNullOrEmpty(input.IPAddress))
                 {
                     var messageBody = new InputMessage(correlationId, input.IPAddress);
-                    var task = _senders.GeoIPSender.SendMessageAsync(new ServiceBusMessage(messageBody.ToString()));
+                    var json = JsonSerializer.Serialize(messageBody);
+
+                    var task = _senders.GeoIPSender.SendMessageAsync(new ServiceBusMessage(json));
 
                     tasks.Add(task);
-                    workerServicesMessagesSent.Add(service.Name);
+                    workerServicesMessagesSent.Add(_collectorQueues.responseQueue1);
                 }
                 else if (service.Name == "RDAP Worker Service" && !string.IsNullOrEmpty(input.DomainAddress))
                 {
                     var messageBody = new InputMessage(correlationId, input.DomainAddress);
-                    var task = _senders.RDAPSender.SendMessageAsync(new ServiceBusMessage(messageBody.ToString()));
+                    string json = JsonSerializer.Serialize(messageBody);
+
+                    var task = _senders.RDAPSender.SendMessageAsync(new ServiceBusMessage(json));
 
                     tasks.Add(task);
-                    workerServicesMessagesSent.Add(service.Name);
+                    workerServicesMessagesSent.Add(_collectorQueues.responseQueue2);
                 }
             }
 
             await Task.WhenAll(tasks);
 
-            var result = await CollectResponsesAsync(workerServicesMessagesSent);
+            var result = await CollectResponsesAsync(correlationId, workerServicesMessagesSent);
 
             return Ok(result);
         }
 
-        private async Task<Output> CollectResponsesAsync(List<string> workerServicesMessagesSent)
+        private async Task<Output> CollectResponsesAsync(Guid correlationId, List<string> workerServicesMessagesSent)
         {
-            var result = false;
+            var doneProcessing = false;
 
-            while (!result)
+            var responseReceiver1 = _client.CreateReceiver(_collectorQueues.responseQueue1);
+            var responseReceiver2 = _client.CreateReceiver(_collectorQueues.responseQueue2);
+
+            var resultOutput = new Output();
+            var count = 0;
+
+            while (!doneProcessing && count <= 30)
             {
                 await Task.Delay(1000);
 
-                foreach (var message in workerServicesMessagesSent)
+                var worker1Messages = new List<ServiceBusReceivedMessage>();
+                var worker2Messages = new List<ServiceBusReceivedMessage>();
+
+                if (workerServicesMessagesSent.Contains(_collectorQueues.responseQueue1))
                 {
+                    worker1Messages.AddRange(await responseReceiver1.ReceiveMessagesAsync(10));
+                }
+
+                if (workerServicesMessagesSent.Contains(_collectorQueues.responseQueue2))
+                {
+                    worker2Messages.AddRange(await responseReceiver2.ReceiveMessagesAsync(10));
+                }
+
+                var messagesToProcess = new List<TempOutput>();
+
+                foreach (var message in worker1Messages)
+                {
+
+                    try
+                    {
+                        // deserialize the JSON string into TestModel
+                        var output = JsonSerializer.Deserialize<Output>(message.Body);
+
+                        if (output.CorrelationId == correlationId)
+                        {
+                            messagesToProcess.Add(new TempOutput
+                            {
+                                message = message,
+                                Output = output
+                            });
+
+                            await responseReceiver1.CompleteMessageAsync(message);
+                        }
+                        else
+                        {
+                            await responseReceiver1.AbandonMessageAsync(message);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        await responseReceiver1.CompleteMessageAsync(message);
+                    }
+
                     
                 }
+
+                foreach (var message in worker2Messages)
+                {
+                    try
+                    {
+                        var output = JsonSerializer.Deserialize<Output>(message.Body);
+
+                        if (output.CorrelationId == correlationId)
+                        {
+                            messagesToProcess.Add(new TempOutput
+                            {
+                                message = message,
+                                Output = output
+                            });
+
+                            await responseReceiver2.CompleteMessageAsync(message);
+                        }
+                        else
+                        {
+                            await responseReceiver2.AbandonMessageAsync(message);
+                        }
+                    }
+                    catch
+                    {
+                        await responseReceiver2.CompleteMessageAsync(message);
+                    }
+                    
+                }
+
+                if (messagesToProcess.Count == workerServicesMessagesSent.Count)
+                {
+                    foreach (var message in messagesToProcess)
+                    {
+                        Output.CopyValues(resultOutput, message.Output);
+                    }
+
+                    doneProcessing = true;
+                }
+
+                count++;
             }
 
-            return new Output();
+            return resultOutput;
         }
     }
 }
