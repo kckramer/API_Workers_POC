@@ -8,6 +8,6 @@ namespace RDAPWorkerService.Models
     {
         public Guid CorrelationId { get; set; }
 
-        public string Data { get; set; }
+        public string DomainDetails { get; set; }
     }
 }

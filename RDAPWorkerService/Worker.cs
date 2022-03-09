@@ -65,13 +65,25 @@ namespace RDAPWorkerService
         private async Task MessageHandler(ProcessMessageEventArgs args)
         {
             var body = args.Message.Body;
-            _logger.LogInformation($"Received: {body}");
 
-            var output = JsonSerializer.Deserialize<Output>(body);
+            var inputMessage = JsonSerializer.Deserialize<InputMessage>(body);
+            var output = new Output();
 
-            output.Data = "Service unavailable";
+            output.CorrelationId = inputMessage.CorrelationId;
 
-            await _serviceBusSender.SendMessageAsync(new ServiceBusMessage(JsonSerializer.Serialize(output)));
+            try
+            {
+                // this always throws?! :(
+                var result = await _domainsRDAPService.Domain.Get(inputMessage.Data).ExecuteAsync();
+            }
+            catch (Exception ex)
+            {
+                output.DomainDetails = $"RDAP API threw exception: " + ex.Message;
+            }
+
+            var outputMessage = JsonSerializer.Serialize(output);
+
+            await _serviceBusSender.SendMessageAsync(new ServiceBusMessage(outputMessage));
 
             await args.CompleteMessageAsync(args.Message);
         }

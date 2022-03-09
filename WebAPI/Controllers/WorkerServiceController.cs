@@ -135,10 +135,11 @@ namespace WebAPI.Controllers
                             messagesToProcess.Add(new TempOutput
                             {
                                 message = message,
-                                Output = output
+                                Output = output,
+                                WorkerIndex = 0
                             });
 
-                            await responseReceiver1.CompleteMessageAsync(message);
+                            break;
                         }
                         else
                         {
@@ -164,10 +165,11 @@ namespace WebAPI.Controllers
                             messagesToProcess.Add(new TempOutput
                             {
                                 message = message,
-                                Output = output
+                                Output = output,
+                                WorkerIndex = 1
                             });
-
-                            await responseReceiver2.CompleteMessageAsync(message);
+                            
+                            break;
                         }
                         else
                         {
@@ -186,6 +188,15 @@ namespace WebAPI.Controllers
                     foreach (var message in messagesToProcess)
                     {
                         Output.CopyValues(resultOutput, message.Output);
+
+                        if (message.WorkerIndex == 0)
+                        {
+                            await responseReceiver1.CompleteMessageAsync(message.message);
+                        }
+                        else if (message.WorkerIndex == 1)
+                        {
+                            await responseReceiver2.CompleteMessageAsync(message.message);
+                        }
                     }
 
                     doneProcessing = true;

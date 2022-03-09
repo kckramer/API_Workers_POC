@@ -7,5 +7,7 @@ namespace WebAPI.Models
         public ServiceBusReceivedMessage message { get; set; }
 
         public Output Output { get; set; }
+
+        public int WorkerIndex { get; set; }
     }
 }
